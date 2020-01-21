@@ -596,7 +596,8 @@ static void ReadNodeAttributes(
     RawModel& raw,
     FbxScene* pScene,
     FbxNode* pNode,
-    const std::map<const FbxTexture*, FbxString>& textureLocations) {
+    const std::map<const FbxTexture*, FbxString>& textureLocations,
+    const GltfOptions& options) {
   if (!pNode->GetVisibility()) {
     return;
   }
@@ -620,15 +621,21 @@ static void ReadNodeAttributes(
       case FbxNodeAttribute::eNurbsSurface:
       case FbxNodeAttribute::eTrimNurbsSurface:
       case FbxNodeAttribute::ePatch: {
-        ReadMesh(raw, pScene, pNode, textureLocations);
+        if (!options.skipMeshes) {
+          ReadMesh(raw, pScene, pNode, textureLocations);
+        }
         break;
       }
       case FbxNodeAttribute::eCamera: {
-        ReadCamera(raw, pScene, pNode);
+        if (!options.skipCameras) {
+          ReadCamera(raw, pScene, pNode);
+        }
         break;
       }
       case FbxNodeAttribute::eLight:
-        ReadLight(raw, pScene, pNode);
+        if (!options.skipLights) {
+          ReadLight(raw, pScene, pNode);
+        }
         break;
       case FbxNodeAttribute::eUnknown:
       case FbxNodeAttribute::eNull:
@@ -651,7 +658,7 @@ static void ReadNodeAttributes(
   }
 
   for (int child = 0; child < pNode->GetChildCount(); child++) {
-    ReadNodeAttributes(raw, pScene, pNode->GetChild(child), textureLocations);
+    ReadNodeAttributes(raw, pScene, pNode->GetChild(child), textureLocations, options);
   }
 }
 
@@ -740,7 +747,23 @@ static void ReadNodeHierarchy(
   }
 }
 
+static void ListAnimations(RawModel& raw, FbxScene* pScene) {
+  const int animationCount = pScene->GetSrcObjectCount<FbxAnimStack>();
+
+  for (size_t animIx = 0; animIx < animationCount; animIx++) {
+    FbxAnimStack* pAnimStack = pScene->GetSrcObject<FbxAnimStack>(animIx);
+    FbxString animStackName = pAnimStack->GetName();
+
+    fmt::printf("%s\n", std::string(animStackName));
+  }
+}
+
 static void ReadAnimations(RawModel& raw, FbxScene* pScene, const GltfOptions& options) {
+  if (options.skipAnimations) {
+    fmt::printf("Skipping animations\n");
+    return;
+  }
+
   FbxTime::EMode eMode = FbxTime::eFrames24;
   switch (options.animationFramerate) {
     case AnimationFramerateOptions::BAKE24:
@@ -755,10 +778,21 @@ static void ReadAnimations(RawModel& raw, FbxScene* pScene, const GltfOptions& o
   }
   const double epsilon = 1e-5f;
 
+  std::vector<std::string> includeAnim = options.includeAnimations;
+
   const int animationCount = pScene->GetSrcObjectCount<FbxAnimStack>();
   for (size_t animIx = 0; animIx < animationCount; animIx++) {
     FbxAnimStack* pAnimStack = pScene->GetSrcObject<FbxAnimStack>(animIx);
     FbxString animStackName = pAnimStack->GetName();
+
+    if (includeAnim.size() > 0 &&
+        std::find(
+            includeAnim.begin(),
+            includeAnim.end(),
+            std::string(animStackName)) == includeAnim.end()) {
+      fmt::printf("Skipping animation %s\n", std::string(animStackName));
+      continue;
+    }
 
     pScene->SetCurrentAnimationStack(pAnimStack);
 
@@ -1088,6 +1122,45 @@ static void FindFbxTextures(
   }
 }
 
+bool ListFBXFileAnimations(
+    RawModel& raw,
+    const std::string fbxFileName
+) {
+  std::string fbxFileNameU8 = NativeToUTF8(fbxFileName);
+  FbxManager* pManager = FbxManager::Create();
+
+  FbxIOSettings* pIoSettings = FbxIOSettings::Create(pManager, IOSROOT);
+  pManager->SetIOSettings(pIoSettings);
+
+  FbxImporter* pImporter = FbxImporter::Create(pManager, "");
+
+  if (!pImporter->Initialize(fbxFileNameU8.c_str(), -1, pManager->GetIOSettings())) {
+    if (verboseOutput) {
+      fmt::printf("%s\n", pImporter->GetStatus().GetErrorString());
+    }
+    pImporter->Destroy();
+    pManager->Destroy();
+    return false;
+  }
+
+  FbxScene* pScene = FbxScene::Create(pManager, "fbxScene");
+  pImporter->Import(pScene);
+  pImporter->Destroy();
+
+  if (pScene == nullptr) {
+    pImporter->Destroy();
+    pManager->Destroy();
+    return false;
+  }
+
+  ListAnimations(raw, pScene);
+
+  pScene->Destroy();
+  pManager->Destroy();
+
+  return true;
+}
+
 bool LoadFBXFile(
     RawModel& raw,
     const std::string fbxFileName,
@@ -1150,7 +1223,7 @@ bool LoadFBXFile(
   scaleFactor = FbxSystemUnit::m.GetConversionFactorFrom(FbxSystemUnit::cm);
 
   ReadNodeHierarchy(raw, pScene, pScene->GetRootNode(), 0, "");
-  ReadNodeAttributes(raw, pScene, pScene->GetRootNode(), textureLocations);
+  ReadNodeAttributes(raw, pScene, pScene->GetRootNode(), textureLocations, options);
   ReadAnimations(raw, pScene, options);
 
   pScene->Destroy();

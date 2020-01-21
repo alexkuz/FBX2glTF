@@ -125,4 +125,16 @@ struct GltfOptions {
 
   /** Temporary directory used by FBX SDK. */
   std::string fbxTempDir;
+
+  bool skipMeshes{false};
+
+  bool skipCameras{false};
+
+  bool skipLights{false};
+
+  bool skipAnimations{false};
+
+  std::vector<std::string> includeAnimations{};
+
+  bool listAnimations{false};
 };

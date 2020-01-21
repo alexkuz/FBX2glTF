@@ -16,4 +16,8 @@ bool LoadFBXFile(
     const std::set<std::string>& textureExtensions,
     const GltfOptions& options);
 
+bool ListFBXFileAnimations(
+    RawModel& raw,
+    const std::string fbxFileName);
+
 json TranscribeProperty(FbxProperty& prop);

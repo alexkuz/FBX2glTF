@@ -239,7 +239,39 @@ int main(int argc, char* argv[]) {
 
   app.add_option("--fbx-temp-dir", gltfOptions.fbxTempDir, "Temporary directory to be used by FBX SDK.")->check(CLI::ExistingDirectory);
 
+  app.add_flag("--skip-meshes", gltfOptions.skipMeshes, "Don't include meshes in output.");
+
+  app.add_flag("--skip-cameras", gltfOptions.skipCameras, "Don't include cameras in output.");
+
+  app.add_flag("--skip-lights", gltfOptions.skipLights, "Don't include light sources in output.");
+
+  app.add_flag("--skip-animations", gltfOptions.skipAnimations, "Don't include animations in output.");
+
+  app.add_option("--include-animation", gltfOptions.includeAnimations, "Include given animations only.")
+    ->type_name("NAME");
+
+  const auto opt_list_animations = app.add_flag("--list-animations", "List animation names and exit.");
+
   CLI11_PARSE(app, argc, argv);
+
+  if (opt_list_animations) {
+    RawModel raw;
+    if (inputPath.empty()) {
+      fmt::printf("You must supply a FBX file to convert.\n");
+      exit(1);
+    }
+
+    if (verboseOutput) {
+      fmt::printf("Loading FBX File: %s\n", inputPath);
+    }
+
+    if (!ListFBXFileAnimations(raw, inputPath)) {
+      fmt::fprintf(stderr, "ERROR:: Failed to parse FBX: %s\n", inputPath);
+      return 1;
+    }
+
+    return 0;
+  }
 
   bool do_flip_u = false;
   bool do_flip_v = true;
