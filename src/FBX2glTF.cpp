@@ -250,11 +250,11 @@ int main(int argc, char* argv[]) {
   app.add_option("--include-animation", gltfOptions.includeAnimations, "Include given animations only.")
     ->type_name("NAME");
 
-  const auto opt_list_animations = app.add_flag("--list-animations", "List animation names and exit.");
+  CLI::Option* opt_list_animations = app.add_flag("--list-animations", "List animation names and exit.");
 
   CLI11_PARSE(app, argc, argv);
 
-  if (opt_list_animations) {
+  if (*opt_list_animations) {
     RawModel raw;
     if (inputPath.empty()) {
       fmt::printf("You must supply a FBX file to convert.\n");
